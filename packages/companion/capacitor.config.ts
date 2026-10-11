@@ -6,6 +6,17 @@ const config: CapacitorConfig = {
   // Built by @takalif/web: the exact UI the PWA serves, so the companion can
   // never drift from it. Run pnpm build first.
   webDir: '../web/dist',
+  // Serve the WebView over http, not Capacitor's https default. The companion
+  // fetches a plain-HTTP LAN server (192.168.x.x); from an https page that is
+  // mixed content, which the WebView blocks — the Connect screen then reports
+  // "Cannot reach" for an address a phone browser opens fine. Over http there
+  // is no mixed-content class at all. `localhost` stays a secure context, so
+  // the service worker keeps working, and the server already allowlists
+  // http://localhost as a companion origin. Note: switching schemes starts a
+  // fresh localStorage, so an installed app pairs once more.
+  server: {
+    androidScheme: 'http',
+  },
   // The companion talks to a home server over plain LAN HTTP. HTTPS on a
   // residential LAN is out of reach, so cleartext stays on; the pairing
   // bearer token (not transport secrecy) is what protects the ledger.
