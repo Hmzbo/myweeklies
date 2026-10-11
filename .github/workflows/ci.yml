@@ -183,11 +183,14 @@ jobs:
           java-version: 21
 
       # Installs cmdline-tools, accepts SDK licenses, sets ANDROID_HOME.
-      # compileSdk/targetSdk 36 (variables.gradle): the platform and
-      # build-tools arrive via AGP auto-download against the accepted
-      # licenses, so no revision string is pinned here.
+      # v4+: the long-dead `tools` package is no longer in the defaults
+      # (requesting it fails with `Failed to find package 'tools'`), and the
+      # platform + build-tools are pinned to variables.gradle (compileSdk 36)
+      # rather than left to AGP auto-download.
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
