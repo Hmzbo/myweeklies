@@ -14,9 +14,15 @@ importers:
 
   packages/companion:
     dependencies:
+      '@capacitor-mlkit/barcode-scanning':
+        specifier: 8.2.1
+        version: 8.2.1(@capacitor/core@8.5.3)
       '@capacitor/android':
         specifier: ^8.0.0
         version: 8.5.3(@capacitor/core@8.5.3)
+      '@capacitor/app':
+        specifier: 8.1.2
+        version: 8.1.2(@capacitor/core@8.5.3)
       '@capacitor/cli':
         specifier: ^8.0.0
         version: 8.5.3
@@ -91,6 +97,12 @@ importers:
 
   packages/web:
     dependencies:
+      '@capacitor-mlkit/barcode-scanning':
+        specifier: 8.2.1
+        version: 8.2.1(@capacitor/core@8.5.3)
+      '@capacitor/app':
+        specifier: 8.1.2
+        version: 8.1.2(@capacitor/core@8.5.3)
       '@capacitor/core':
         specifier: ^8.5.3
         version: 8.5.3
@@ -668,10 +680,20 @@ packages:
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
 
+  '@capacitor-mlkit/barcode-scanning@8.2.1':
+    resolution: {integrity: sha512-UdjIOK2dJwJ7c3Y+lRuRqIaP0VfHJeLvPNyE5kHrFU20MY++4uoAVm7JTWSklVVrjN4siIK/xmXL3QsYbthWSQ==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
+
   '@capacitor/android@8.5.3':
     resolution: {integrity: sha512-ilH4gSSz3DrketMkzDVAvY9JsWJ//rCQnECLTdcFRO7xXDogwAbUvQAnIAbiqefwV/D1xfjEL4Gw1MJXEcaA9g==}
     peerDependencies:
       '@capacitor/core': ^8.5.0
+
+  '@capacitor/app@8.1.2':
+    resolution: {integrity: sha512-uKBlsrXH0IdvUn69e/KKYbZ32A06pcrUdG8LWuZ/6y33YMXZXLEEdNSwl+jKS/SrsTWqnePs8EqSWaiQM3mUGA==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
 
   '@capacitor/cli@8.5.3':
     resolution: {integrity: sha512-/G6xwna+p4GS3lthSdWN3OThCH2F85O0Ukdy8rv3oAXvgEMeyFgPEIA3PMAS++IkHwUuBYBAKOQJnZfcrh1n0w==}
@@ -4168,7 +4190,15 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
+  '@capacitor-mlkit/barcode-scanning@8.2.1(@capacitor/core@8.5.3)':
+    dependencies:
+      '@capacitor/core': 8.5.3
+
   '@capacitor/android@8.5.3(@capacitor/core@8.5.3)':
+    dependencies:
+      '@capacitor/core': 8.5.3
+
+  '@capacitor/app@8.1.2(@capacitor/core@8.5.3)':
     dependencies:
       '@capacitor/core': 8.5.3
 
