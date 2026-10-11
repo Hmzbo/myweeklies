@@ -20,6 +20,14 @@ import {
 import type { DB } from './db.js';
 import { bearerToken, isLoopback, lanIPv4, pickPairingInterfaces, rotateToken } from './auth.js';
 import { networkInterfaces } from 'node:os';
+
+/**
+ * WebView origins of the native companion shells (Android `http`, iOS
+ * `capacitor` scheme). Allowed by construction, never by user config: a
+ * browser always reports its true Origin, so no remote site can borrow these,
+ * and only a local companion process can own them.
+ */
+const NATIVE_ORIGINS = ['capacitor://localhost', 'http://localhost'];
 import {
   archiveRule,
   buildPeriodReport,
@@ -140,10 +148,11 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
   app.register(cors, {
     origin(origin, callback) {
       // Same-origin requests, curl and native app shells send no Origin.
-      // Absent that, only explicitly allowed origins may call us: reflecting
-      // any origin would let any site the owner visits read and rewrite the
-      // ledger, because it is the browser that makes the request.
-      if (origin === undefined || allowedOrigins.has(origin)) {
+      // Absent that, explicitly allowed origins plus the companion WebView
+      // origins may call us: reflecting any other origin would let any site
+      // the owner visits read and rewrite the ledger, because it is the
+      // browser that makes the request.
+      if (origin === undefined || allowedOrigins.has(origin) || NATIVE_ORIGINS.includes(origin)) {
         callback(null, true);
         return;
       }
@@ -865,6 +874,12 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
    * non-loopback callers must present it on every API route except
    * /api/health. Loopback stays open — the desktop shell, curl, and the test
    * harness all speak from this machine.
+   *
+   * A request carrying the valid bearer skips the Origin check below: the
+   * token is the authentication, and a cross-site attacker cannot know it
+   * (it is never ambient like a cookie). Preflight OPTIONS carries no
+   * credentials by design, so it passes through to the CORS handler, which
+   * answers from the allowlist above.
    */
   app.addHook('onRequest', async (request, reply) => {
     // LAN token boundary first: it applies regardless of Origin, because a
@@ -883,8 +898,13 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
       return;
     }
 
+    if (request.method === 'OPTIONS') return;
+    if (authToken && bearerToken(request.headers.authorization) === authToken) return;
+
     const origin = request.headers.origin;
-    if (origin === undefined || allowedOrigins.has(origin)) return;
+    if (origin === undefined || allowedOrigins.has(origin) || NATIVE_ORIGINS.includes(origin)) {
+      return;
+    }
 
     // A browser sending `Origin` is always cross-origin: the app has no
     // multi-host story, and the PWA it serves is same-origin. So an origin

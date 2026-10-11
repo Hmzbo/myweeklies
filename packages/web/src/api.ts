@@ -8,6 +8,8 @@ import type {
   Settings,
   SkipPeriod,
 } from '@takalif/core';
+import { Capacitor } from '@capacitor/core';
+import { getConnection, type ServerConnection } from './connection.js';
 
 /** An occurrence as returned by /api/day and /api/occurrences (see `decorate`). */
 export interface DayItem extends Occurrence {
@@ -58,26 +60,153 @@ export class ApiError extends Error {
   }
 }
 
+/** True inside the native companion shell. PWA and desktop: always false. */
+export function isCompanion(): boolean {
+  try {
+    return Capacitor.isNativePlatform();
+  } catch {
+    return false;
+  }
+}
+
+export interface Endpoint {
+  url: string;
+  headers: Record<string, string>;
+}
+
+function normalizeHeaders(value: HeadersInit | undefined): Record<string, string> {
+  if (!value) return {};
+  if (value instanceof Headers) {
+    const out: Record<string, string> = {};
+    value.forEach((v, k) => {
+      out[k] = v;
+    });
+    return out;
+  }
+  if (Array.isArray(value)) return Object.fromEntries(value);
+  return { ...(value as Record<string, string>) };
+}
+
+/**
+ * Resolve where a call goes. Pure and fully tested. Native shell with a
+ * stored connection → LAN base plus bearer; everything else → the
+ * same-origin call the PWA and desktop have always made.
+ */
+export function buildEndpoint(
+  path: string,
+  conn: ServerConnection | null,
+  native: boolean,
+): Endpoint {
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (conn && native) {
+    return { url: `${conn.url}${path}`, headers: { ...headers, authorization: `Bearer ${conn.token}` } };
+  }
+  return { url: path, headers };
+}
+
+async function readError(res: Response): Promise<ApiError> {
+  let message = `Request failed (${res.status})`;
+  try {
+    const text = await res.text();
+    const data = text ? (JSON.parse(text) as unknown) : null;
+    if (data && typeof data === 'object' && 'error' in data && typeof data.error === 'string') {
+      message = data.error;
+    }
+  } catch {
+    // Non-JSON error body: the status-based default stands.
+  }
+  return new ApiError(res.status, message);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const { url, headers } = buildEndpoint(path, getConnection(), isCompanion());
   let res: Response;
   try {
-    res = await fetch(path, {
-      headers: { 'content-type': 'application/json' },
-      ...init,
-    });
+    res = await fetch(url, { ...init, headers: { ...headers, ...normalizeHeaders(init?.headers) } });
   } catch {
     throw new ApiError(0, 'Cannot reach the server. Is it running?');
   }
+  if (!res.ok) throw await readError(res);
   const text = await res.text();
-  const data = text ? (JSON.parse(text) as unknown) : null;
-  if (!res.ok) {
-    const message =
-      data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
-        ? data.error
-        : `Request failed (${res.status})`;
-    throw new ApiError(res.status, message);
+  return (text ? (JSON.parse(text) as unknown) : null) as T;
+}
+
+/** Read a JSON body, throwing the server's error message on bad status. */
+async function throwIfJson(res: Response): Promise<unknown> {
+  if (!res.ok) throw await readError(res);
+  const text = await res.text();
+  return text ? (JSON.parse(text) as unknown) : null;
+}
+
+/** Unauthenticated liveness check for the Connect screen: /health needs no bearer. */
+export async function probeServer(url: string): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch(`${url}/api/health`);
+  } catch {
+    throw new ApiError(
+      0,
+      `Cannot reach ${url}. Same WiFi as the server, and is it running?`,
+    );
   }
-  return data as T;
+  const data = await throwIfJson(res);
+  if (data === null || typeof data !== 'object') {
+    throw new ApiError(res.status, `That address answers, but it is not a Takalif server.`);
+  }
+  const { ok, today } = data as { ok?: unknown; today?: unknown };
+  if (ok !== true || typeof today !== 'string') {
+    throw new ApiError(res.status, `That address answers, but it is not a Takalif server.`);
+  }
+  return today;
+}
+
+export type ExportKind = 'json' | 'csv' | 'ics';
+
+const EXPORT_PATHS: Record<ExportKind, string> = {
+  json: '/api/export/json',
+  csv: '/api/export/csv',
+  ics: '/api/export/vtodo',
+};
+
+const EXPORT_FALLBACK: Record<ExportKind, string> = {
+  json: 'takalif-backup.json',
+  csv: 'takalif-ledger.csv',
+  ics: 'takalif-rules.ics',
+};
+
+/** Fetch an export through the same authenticated channel as everything else
+ *  (plain anchors can carry no bearer). The caller turns blob+filename into a
+ *  download, which keeps DOM out of this module and the logic testable. */
+export async function fetchExport(kind: ExportKind): Promise<{ blob: Blob; filename: string }> {
+  const { url, headers } = buildEndpoint(EXPORT_PATHS[kind], getConnection(), isCompanion());
+  let res: Response;
+  try {
+    res = await fetch(url, { headers });
+  } catch {
+    throw new ApiError(0, 'Cannot reach the server. Is it running?');
+  }
+  if (!res.ok) throw await readError(res);
+  const blob = await res.blob();
+  const filename =
+    /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ??
+    EXPORT_FALLBACK[kind];
+  return { blob, filename };
+}
+
+/** Save a fetched export via a temporary object URL. */
+export async function downloadExport(kind: ExportKind): Promise<void> {
+  const { blob, filename } = await fetchExport(kind);
+  const href = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement('a');
+    anchor.href = href;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(href), 1000);
+  }
 }
 
 const withBody = (method: string, body: unknown): RequestInit => ({
@@ -184,11 +313,6 @@ export const api = {
     ),
   rotatePairing: () => request<{ token: string }>('/api/pairing/rotate', withBody('POST', {})),
 
-  exportUrls: {
-    backupJson: '/api/export/json',
-    ledgerCsv: '/api/export/csv',
-    rulesVtodo: '/api/export/vtodo',
-  },
   importBackup: (doc: unknown) =>
     request<{ restored: boolean; rules: number; occurrences: number }>(
       '/api/import/json',

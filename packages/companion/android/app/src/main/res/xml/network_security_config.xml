@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The companion talks to a home server over plain LAN HTTP: residential LANs
+  have no TLS, so cleartext stays on. The pairing bearer token — not transport
+  secrecy — is what protects the ledger. Scope this to domains if a
+  deployment ever gets certificates.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -75,6 +75,15 @@ web code changes. The sidecar is a stock Node runtime plus the server bundle
 and the native closure, assembled per platform; data lives in `%APPDATA%`,
 never the repo.
 
+### `packages/companion` — Capacitor shell for Android
+
+The same web UI in a native WebView, pointed at a home server over LAN. A
+native shell has no PWA installability rules to satisfy, so there are no
+browser flags and no Tailscale: first launch shows a Connect screen (paste a
+pairing code or enter address + secret), and the stored server URL plus bearer
+token prefix every API call. Reminders travel over ntfy; no native
+notification code in v1.
+
 ---
 
 ## 3. Source of truth
@@ -100,7 +109,9 @@ statistics application that needs a canonical view.
 API access from off the machine additionally requires the pairing bearer
 token (`TAKALIF_TOKEN` or the persisted sidecar file); loopback callers never
 need it, and `/api/health` stays open for managers and probes. The pairing
-endpoint itself answers loopback callers only.
+endpoint itself answers loopback callers only. The companion keeps its token
+in device storage: whoever holds it holds the ledger, which is exactly what
+the bearer is for — there is no milder credential to offer.
 
 ---
 

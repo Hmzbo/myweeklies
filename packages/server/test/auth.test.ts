@@ -260,6 +260,64 @@ describe('LAN token enforcement', () => {
     }
   });
 
+  it('admits a bearer call from a companion WebView origin', async () => {
+    setup();
+    try {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/rules',
+        remoteAddress: REMOTE,
+        headers: { origin: 'capacitor://localhost', authorization: `Bearer ${TOKEN}` },
+      });
+      expect(res.statusCode).toBe(200);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('answers preflight from a companion WebView origin', async () => {
+    setup();
+    try {
+      const res = await app.inject({
+        method: 'OPTIONS',
+        url: '/api/rules',
+        remoteAddress: REMOTE,
+        headers: {
+          origin: 'http://localhost',
+          'access-control-request-method': 'POST',
+          'access-control-request-headers': 'authorization,content-type',
+        },
+      });
+      expect(res.statusCode).toBe(204);
+      expect(res.headers['access-control-allow-origin']).toBe('http://localhost');
+    } finally {
+      teardown();
+    }
+  });
+
+  it('still refuses an unknown browser origin without a bearer', async () => {
+    setup();
+    try {
+      // No bearer on the LAN: the token boundary answers first.
+      const remote = await app.inject({
+        method: 'GET',
+        url: '/api/rules',
+        remoteAddress: REMOTE,
+        headers: { origin: 'https://evil.example' },
+      });
+      expect(remote.statusCode).toBe(401);
+      // An evil Origin over loopback reaches the origin guard instead.
+      const local = await app.inject({
+        method: 'GET',
+        url: '/api/rules',
+        headers: { origin: 'https://evil.example' },
+      });
+      expect(local.statusCode).toBe(403);
+    } finally {
+      teardown();
+    }
+  });
+
   it('rotation is refused while the token is pinned by env', async () => {
     const pinnedDir = mkdtempSync(join(tmpdir(), 'takalif-auth-'));
     const pinnedDb = openDatabase(join(pinnedDir, 'test.sqlite'));

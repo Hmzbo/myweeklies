@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Settings } from '@takalif/core';
 import { api } from './api';
+import { getConnection, isCompanion } from './connection.js';
 import { useOnline, useResource, useTheme } from './data';
 import {
   IconCalendar,
@@ -13,6 +14,7 @@ import {
   IconSunDim,
 } from './icons';
 import { CalendarView } from './components/CalendarView';
+import { ConnectView } from './components/ConnectView';
 import { RulesView } from './components/RulesView';
 import { SettingsView } from './components/SettingsView';
 import { StatsView, type ReviewRange } from './components/StatsView';
@@ -63,6 +65,11 @@ export function App() {
   const [dayDate, setDayDate] = useState<string | null>(initialDateParam);
   // Bumped when Today's "New task" is tapped: Tasks opens straight into the form.
   const [createRequest, setCreateRequest] = useState(0);
+  // Companion gate: a native shell with no stored server has nothing to show
+  // yet. PWA and desktop never enter this branch — same-origin always works.
+  const [connected, setConnected] = useState(
+    () => !isCompanion() || getConnection() !== null,
+  );
 
   function reviewRangeAction(from: string, to: string) {
     setReviewRange({ from, to });
@@ -114,6 +121,10 @@ export function App() {
       </header>
 
       <main className="app">
+        {!connected ? (
+          <ConnectView onConnected={() => setConnected(true)} />
+        ) : (
+          <>
         {tab === 'today' && (
           <TodayView
             settings={settings.data}
@@ -130,7 +141,15 @@ export function App() {
           <RulesView onChanged={() => settings.refresh()} createRequest={createRequest} />
         )}
         {tab === 'stats' && <StatsView reviewRange={reviewRange} reviewNonce={reviewNonce} />}
-        {tab === 'settings' && <SettingsView onChanged={() => settings.refresh()} />}
+        {tab === 'settings' && (
+          <SettingsView
+            onChanged={() => settings.refresh()}
+            companion={isCompanion() && connected}
+            onDisconnect={() => setConnected(false)}
+          />
+        )}
+          </>
+        )}
       </main>
 
       <nav className="tabs" aria-label="Sections">

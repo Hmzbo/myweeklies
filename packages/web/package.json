@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.sw.json"
   },
   "dependencies": {
+    "@capacitor/core": "^8.5.3",
     "@takalif/core": "workspace:*",
     "qrcode.react": "^4.2.0",
     "react": "^19.1.0",

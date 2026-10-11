@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { Settings, SkipPeriod } from '@takalif/core';
-import { api, ApiError } from '../api';
+import { api, ApiError, downloadExport, type ExportKind } from '../api';
+import { getConnection } from '../connection.js';
 import { runMutation, useResource, useTheme } from '../data';
 import { buildPairingPayload, pairingUrl } from '../pairing';
 import { CALENDAR_OPTIONS } from '../format';
@@ -13,6 +14,7 @@ import {
   type PushState,
 } from '../push';
 import { Banner, Field, Skeleton } from '../ui';
+import { DisconnectButton } from './ConnectView';
 
 /** Common IANA zones for the datalist. Anything valid also works typed by hand. */
 const COMMON_ZONES = [
@@ -278,7 +280,16 @@ function PairDevice() {
   );
 }
 
-export function SettingsView({ onChanged }: { onChanged: () => void }) {
+export function SettingsView({
+  onChanged,
+  companion,
+  onDisconnect,
+}: {
+  onChanged: () => void;
+  /** True while a companion server connection is stored. PWA/desktop: always false. */
+  companion: boolean;
+  onDisconnect: () => void;
+}) {
   const { theme, setTheme } = useTheme();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
@@ -304,6 +315,8 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
   const [importMessage, setImportMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(
     null,
   );
+  const [exportBusy, setExportBusy] = useState<ExportKind | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [periods, setPeriods] = useState<SkipPeriod[] | null>(null);
   const [skStart, setSkStart] = useState('');
   const [skEnd, setSkEnd] = useState('');
@@ -449,6 +462,18 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
     });
     if (err) setImportMessage({ kind: 'error', text: err.message });
     setImportBusy(false);
+  }
+
+  async function runExport(kind: ExportKind, label: string) {
+    // Exports travel the same authenticated channel as every other call:
+    // plain anchors can carry no bearer, so they break on the companion.
+    setExportBusy(kind);
+    setExportError(null);
+    const err = await runMutation(async () => {
+      await downloadExport(kind);
+    });
+    setExportBusy(null);
+    if (err) setExportError(`${label} failed: ${err.message}`);
   }
 
   async function reloadPeriods() {
@@ -675,6 +700,16 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
 
         <h3 className="section-title">Connection</h3>
         <ConnectionHint />
+        {companion && getConnection() && (
+          <>
+            <p className="muted" style={{ marginBlock: '0.4rem 0' }}>
+              Connected to <span className="mono">{getConnection()?.url}</span>.
+            </p>
+            <div style={{ marginBlockStart: '0.4rem' }}>
+              <DisconnectButton onDisconnected={onDisconnect} />
+            </div>
+          </>
+        )}
 
         <h3 className="section-title">Pair a device</h3>
         <PairDevice />
@@ -685,16 +720,32 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
           spreadsheets; the ICS file carries the schedules to any calendar tool.
         </p>
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-          <a className="btn small" href={api.exportUrls.backupJson} download>
-            Download backup (JSON)
-          </a>
-          <a className="btn small" href={api.exportUrls.ledgerCsv} download>
-            Download ledger (CSV)
-          </a>
-          <a className="btn small" href={api.exportUrls.rulesVtodo} download>
-            Download schedules (ICS)
-          </a>
+          <button
+            type="button"
+            className="btn small"
+            disabled={exportBusy !== null}
+            onClick={() => void runExport('json', 'Download backup (JSON)')}
+          >
+            {exportBusy === 'json' ? 'Preparing…' : 'Download backup (JSON)'}
+          </button>
+          <button
+            type="button"
+            className="btn small"
+            disabled={exportBusy !== null}
+            onClick={() => void runExport('csv', 'Download ledger (CSV)')}
+          >
+            {exportBusy === 'csv' ? 'Preparing…' : 'Download ledger (CSV)'}
+          </button>
+          <button
+            type="button"
+            className="btn small"
+            disabled={exportBusy !== null}
+            onClick={() => void runExport('ics', 'Download schedules (ICS)')}
+          >
+            {exportBusy === 'ics' ? 'Preparing…' : 'Download schedules (ICS)'}
+          </button>
         </div>
+        {exportError && <Banner kind="error">{exportError}</Banner>}
         <Field
           label="Restore from backup"
           hint="Replaces tasks, history and settings with the backup file. This device's push subscription stays as it is. This cannot be undone."

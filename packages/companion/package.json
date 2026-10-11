@@ -1,0 +1,16 @@
+{
+  "name": "@takalif/companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Takalif Android companion: the same PWA UI in a native shell, paired to a home server over LAN",
+  "license": "MIT",
+  "scripts": {
+    "sync": "cap sync android",
+    "open": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/core": "^8.0.0"
+  }
+}
