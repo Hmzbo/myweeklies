@@ -146,3 +146,74 @@ jobs:
           echo "-- csv export, expect a header --"
           curl -fsS -H "$AUTH" 'http://127.0.0.1:8798/api/export/csv?from=2026-01-01&to=2026-12-31' \
             | head -1 | grep -q '^rule_id,'
+
+  companion:
+    name: Companion debug APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: store
+        shell: bash
+        run: echo "dir=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.store.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-store-
+
+      # AGP 8.13 + Gradle 8.14 run on 21; matches the local toolchain (JDK 21).
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # Installs cmdline-tools, accepts SDK licenses, sets ANDROID_HOME.
+      # v4+: the long-dead `tools` package is no longer in the defaults
+      # (requesting it fails with `Failed to find package 'tools'`), and the
+      # platform + build-tools are pinned to variables.gradle (compileSdk 36)
+      # rather than left to AGP auto-download.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The companion bakes ../web/dist (webDir in capacitor.config.ts),
+      # so the bundle must exist before the sync below.
+      - name: Build web bundle
+        run: pnpm build
+
+      # Copies the bundle into the native shell and regenerates the
+      # scanner-plugin bridge (gitignored locally, rebuilt here).
+      - name: Sync Capacitor shell
+        run: pnpm --filter @takalif/companion exec cap sync android
+
+      - name: Assemble debug APK
+        shell: bash
+        run: |
+          chmod +x packages/companion/android/gradlew
+          cd packages/companion/android
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: takalif-companion-debug
+          path: packages/companion/android/app/build/outputs/apk/debug/app-debug.apk
