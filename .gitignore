@@ -25,3 +25,9 @@ packages/desktop/src-tauri/gen/
 
 # Agent review reports: process artifacts, not project documentation.
 review-reports/
+
+# Capacitor/Ionic regenerables: `cap sync` and Gradle recreate these from
+# tracked sources on every build. Never commit them.
+packages/companion/android/.gradle/
+packages/companion/android/app/src/main/assets/
+packages/companion/android/capacitor-cordova-android-plugins/
