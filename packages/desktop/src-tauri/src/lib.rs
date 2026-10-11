@@ -4,6 +4,9 @@
 //! webview's point of view everything is same-origin localhost: no CORS or
 //! origin changes, service worker works, existing tests stay valid.
 //!
+//! The sidecar itself binds all interfaces so a paired companion can reach it
+//! over WiFi; the pairing bearer token is the protection there, not the bind.
+//!
 //! Lifecycle contract: the window stays hidden until the sidecar prints its
 //! listening line (proving *our* child booted, not a stale occupant of the
 //! port), with a timeout that shows it anyway. The child is killed on exit.
@@ -111,7 +114,11 @@ fn start_sidecar(app: &tauri::AppHandle) {
             command
                 .args([server_entry.to_string_lossy().to_string()])
                 .env("PORT", PORT.to_string())
-                .env("HOST", "127.0.0.1")
+                // LAN-reachable on purpose: the companion pairs over WiFi.
+                // The pairing bearer token (not the bind) is what protects
+                // the ledger — loopback callers skip auth, everyone else
+                // presents it, and Windows Firewall still gates the port.
+                .env("HOST", "0.0.0.0")
                 .env(
                     "DB_FILE",
                     data_dir.join("takalif.sqlite").to_string_lossy().to_string(),
