@@ -209,3 +209,7 @@ machine itself — opened from a phone, it says so instead. On machines with
 several addresses, a picker chooses which network the code points at. Address
 and code are also shown as text for manual entry. A wrongly-shared code dies
 on demand with Make a new code; previously issued codes stop working at once.
+
+The Android companion spends the code: first launch shows a Connect screen
+that accepts a pasted payload or a manual address + secret, then behaves as
+the full app against the home server.

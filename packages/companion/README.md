@@ -15,7 +15,11 @@ notification code in v1.
 
 ## Build
 
-Prerequisites: Android Studio (or command-line tools), JDK 17.
+Prerequisites: Android command-line tools (or Studio), JDK 21.
+
+Scanner plugin versions must stay identical in `packages/web` and
+`packages/companion` (both pinned exact): the APK bakes the native side
+while the UI floats with the web bundle, and skew breaks the bridge.
 
 ```bash
 pnpm build                                          # web dist first

@@ -1,14 +1,15 @@
-import { useState } from 'react';
-import { clearConnection, connectWithCode, setConnection, type ServerConnection } from '../connection.js';
+import { useEffect, useRef, useState } from 'react';
+import { clearConnection, connectWithCode, isCompanion, setConnection, type ServerConnection } from '../connection.js';
 import { probeServer } from '../api.js';
 import { runMutation } from '../data.js';
+import { onRestoredScan, scanPairingCode, translateScanError, isCancelError, warmScannerModule } from '../scan.js';
 import { Banner, Field } from '../ui.js';
 
 /**
  * First-run gate for the companion: without a stored server connection there
  * is nothing to show, so connect first. Three paths in, easiest first —
- * pasting a scanned QR payload, then manual address + code. Never rendered in
- * the PWA or desktop shell (see the App gate).
+ * camera scan, pasting a scanned QR payload, then manual address + code.
+ * Never rendered in the PWA or desktop shell (see the App gate).
  */
 export function ConnectView({ onConnected }: { onConnected: () => void }) {
   const [code, setCode] = useState('');
@@ -16,6 +17,44 @@ export function ConnectView({ onConnected }: { onConnected: () => void }) {
   const [token, setToken] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const native = isCompanion();
+  const connectedRef = useRef(onConnected);
+  connectedRef.current = onConnected;
+
+  // The system may kill the app while its scanner UI is open; recover that
+  // result instead of stranding a spinner. A cancel across death is silence,
+  // not an error banner — the user backed out, nothing went wrong.
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+    void warmScannerModule();
+    void onRestoredScan((result) => {
+      if (result.text) void connect(() => connectWithCode(result.text as string));
+      else if (result.error && !isCancelError(result.error)) {
+        setError(translateScanError(new Error(result.error)));
+      }
+    }).then((off) => {
+      if (!cancelled) unsubscribe = off;
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function scan() {
+    setError(null);
+    setBusy(true);
+    try {
+      const text = await scanPairingCode();
+      await connect(() => connectWithCode(text));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function connect(store: () => ServerConnection) {
     setError(null);
@@ -30,7 +69,7 @@ export function ConnectView({ onConnected }: { onConnected: () => void }) {
         clearConnection();
         throw probeError;
       }
-      onConnected();
+      connectedRef.current();
     });
     setBusy(false);
     if (err) setError(err.message);
@@ -41,10 +80,22 @@ export function ConnectView({ onConnected }: { onConnected: () => void }) {
       <h2 style={{ marginBlockEnd: '0.25rem' }}>Connect to your server</h2>
       <p className="muted" style={{ marginBlock: '0 1rem' }}>
         This app shows what your computer tracks. Open Settings → Pair a device
-        there, then either paste the code below or enter the address and secret
-        by hand.
+        there, then scan the code, paste it below, or enter the address and
+        secret by hand.
       </p>
       {error && <Banner kind="error">{error}</Banner>}
+      {native && (
+        <div className="form-actions" style={{ justifyContent: 'flex-start', marginBlockEnd: '1rem' }}>
+          <button
+            type="button"
+            className="btn primary"
+            disabled={busy}
+            onClick={() => void scan()}
+          >
+            {busy ? 'Opening camera…' : 'Scan QR code'}
+          </button>
+        </div>
+      )}
       <Field
         label="Paste the pairing code"
         hint="The whole JSON text, exactly as shown under the QR code."
