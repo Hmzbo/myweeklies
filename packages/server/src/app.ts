@@ -22,12 +22,13 @@ import { bearerToken, isLoopback, lanIPv4, pickPairingInterfaces, rotateToken } 
 import { networkInterfaces } from 'node:os';
 
 /**
- * WebView origins of the native companion shells (Android `http`, iOS
- * `capacitor` scheme). Allowed by construction, never by user config: a
- * browser always reports its true Origin, so no remote site can borrow these,
- * and only a local companion process can own them.
+ * WebView origins of the native companion shells (Android `https` scheme by
+ * default, iOS `capacitor` scheme; `http://localhost` kept for older shells).
+ * Allowed by construction, never by user config: a browser always reports its
+ * true Origin, so no remote site can borrow these, and only a local companion
+ * process can own them.
  */
-const NATIVE_ORIGINS = ['capacitor://localhost', 'http://localhost'];
+const NATIVE_ORIGINS = ['capacitor://localhost', 'http://localhost', 'https://localhost'];
 import {
   archiveRule,
   buildPeriodReport,
