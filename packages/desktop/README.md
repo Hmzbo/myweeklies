@@ -42,6 +42,10 @@ machine (native code cannot cross-compile) — that is what CI does.
 
 Data lives in `%APPDATA%/com.takalif.desktop/takalif.sqlite`, never in the repo.
 
+The sidecar binds all interfaces (`0.0.0.0`) so a paired phone reaches it
+over WiFi — protection comes from the pairing bearer token, and Windows
+Firewall still gates the port. Pair from Settings → Pair a device.
+
 ## Hacking on the shell
 
 `cargo run` (or `cargo tauri dev`) resolves the sidecar binary from
