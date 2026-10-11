@@ -295,6 +295,47 @@ describe('LAN token enforcement', () => {
     }
   });
 
+  it('answers preflight from the Android companion origin', async () => {
+    setup();
+    try {
+      // Capacitor serves Android over the https scheme by default, so the
+      // Connect screen probes from https://localhost — not http. Before the
+      // origin was allowlisted, preflight failed and the probe reported the
+      // server as unreachable from a phone that could load it in a browser.
+      const res = await app.inject({
+        method: 'OPTIONS',
+        url: '/api/rules',
+        remoteAddress: REMOTE,
+        headers: {
+          origin: 'https://localhost',
+          'access-control-request-method': 'POST',
+          'access-control-request-headers': 'authorization,content-type',
+        },
+      });
+      expect(res.statusCode).toBe(204);
+      expect(res.headers['access-control-allow-origin']).toBe('https://localhost');
+    } finally {
+      teardown();
+    }
+  });
+
+  it('admits the Connect-screen probe from the Android companion origin', async () => {
+    setup();
+    try {
+      // /api/health is auth-exempt but not origin-exempt: the unauthenticated
+      // probe carries no bearer, so only the origin allowlist admits it.
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/health',
+        remoteAddress: REMOTE,
+        headers: { origin: 'https://localhost' },
+      });
+      expect(res.statusCode).toBe(200);
+    } finally {
+      teardown();
+    }
+  });
+
   it('still refuses an unknown browser origin without a bearer', async () => {
     setup();
     try {
