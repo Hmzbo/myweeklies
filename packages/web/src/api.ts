@@ -162,6 +162,13 @@ export async function probeServer(url: string): Promise<string> {
 
 export type ExportKind = 'json' | 'csv' | 'ics';
 
+/** What the firewall-consent button's endpoint answers. */
+export type FirewallOutcome =
+  | { status: 'opened' }
+  | { status: 'already' }
+  | { status: 'declined'; message: string }
+  | { status: 'failed'; message: string };
+
 const EXPORT_PATHS: Record<ExportKind, string> = {
   json: '/api/export/json',
   csv: '/api/export/csv',
@@ -312,6 +319,9 @@ export const api = {
       '/api/pairing',
     ),
   rotatePairing: () => request<{ token: string }>('/api/pairing/rotate', withBody('POST', {})),
+  /** One-tap Windows firewall consent. Windows-only server side; others get a message. */
+  openFirewall: () =>
+    request<FirewallOutcome>('/api/pairing/firewall', withBody('POST', {})),
 
   importBackup: (doc: unknown) =>
     request<{ restored: boolean; rules: number; occurrences: number }>(

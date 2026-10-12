@@ -166,8 +166,11 @@ start with `HOST=0.0.0.0`.
 2. Find the PC's LAN address (`ipconfig` on Windows, look for IPv4) and open
    `http://THAT-IP:8787` from the PC first. If the PC can't open it either, the
    server isn't up.
-3. **Windows firewall** must allow inbound TCP on 8787. The first `docker compose
-   up` usually prompts; if you missed it, add the rule by hand.
+3. **Windows firewall** must allow inbound TCP on the companion ports
+   (8787–8788). The desktop app adds the rule for you: Settings → Pair a
+   device → **Allow phones through the firewall** (one press, and only with
+   your permission). Docker usually prompts on first `compose up`; otherwise
+   add the rule by hand.
 4. For access from anywhere (not just home), put it behind Tailscale or any
    reverse proxy you already trust — and put authentication in front, since the
    server itself has none.
