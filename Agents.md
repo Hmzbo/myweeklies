@@ -235,6 +235,51 @@ POST /reset returned 200 for an occurrence that was already settled,
 which let clients silently resurrect history.
 ```
 
+### PR descriptions
+
+The repository is public. Everything you write — PR title, PR body, review
+comments, commit messages, UI strings, README — ships to the internet, so a
+PR description is written once, for two audiences at once: the reviewer who
+needs the reasoning, and a stranger who must never learn anything about the
+maintainer's machine.
+
+**Write:**
+
+1. **Open with the user-visible problem and the *why*** — not the diff.
+   The diff shows what; the body explains the reason the change exists and
+   the reasoning that does not fit in the subject line.
+2. **Name the invariant story:** which domain invariants (`§4`) were touched
+   or considered, and why none was violated — explicitly, when the change
+   even *seems* to require bending one.
+3. **State the verification:** which suites ran and what they may miss
+   (e.g. "device-tested by the maintainer", or "verified by construction
+   only" — said plainly, never implied).
+4. **If it stacks, say so:** which PRs must merge first and why. Stacked
+   branches are the ordinary workflow, not a surprise.
+5. End short. A long body that buries the invariant note is worse than a
+   short one that carries it.
+
+**Never put in a PR — or anywhere public:**
+
+| Banned | Placeholder instead |
+|---|---|
+| Real LAN or public IP addresses, hostnames, WiFi/SSID names | `<PC-IP>`, or the generic example `192.168.1.10:8787` |
+| Pairing tokens, bearer tokens, secrets, key material | `<token>` |
+| Absolute paths from the maintainer machine (`D:\Work\…`, `%APPDATA%\…`) | Paths relative to the repo root (`packages/web/src/…`) |
+| Usernames, email, device names, screenshot contents | — just don't include them |
+| Error banners quoted raw — they embed real addresses. **Paraphrase.** | `a 'Cannot reach <server>' error` |
+| Any live ledger content or personal data, even as an example | Use the seed fixture (`pnpm --filter @takalif/server seed`) data when an example helps |
+
+**Before posting, reread the body asking one question:** 'Could someone who
+has never met me learn something private from this?' — if any word answers
+yes, replace that word with its placeholder and post the rule's way.
+
+**If something leaked anyway:** redact the artifact immediately
+(`gh pr edit --body-file`), fix the tree with a follow-up commit, assess the
+blast radius honestly (token/key material ⇒ force rotation *and* consider a
+history rewrite; RFC 1918 addresses prior to redaction ⇒ document, do not
+rewrite history over it), and record the lesson in the session handoff.
+
 ### Squash or rebase?
 
 Squash-merge is preferred, so `main` carries one commit per PR. Write commits
@@ -255,6 +300,11 @@ the reasoning that does not fit in a single line.
 - [ ] Schema changes include a migration path and are noted in the PR
 - [ ] No secrets, no `.env`, no committed database files
 - [ ] PR description explains the *reason* for the change
+- [ ] PR description (title, body, and any comments) contains no internal
+      identifiers — addresses, tokens, machine paths, user data; §7's rules
+      and placeholders are followed
+- [ ] The change is public-safe everywhere: UI strings, README and commit
+      messages carry no maintainer-machine context either
 
 ---
 
