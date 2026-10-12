@@ -11,7 +11,19 @@ notification code in v1.
   desktop's Settings → Pair a device, or enter address + secret by hand).
 - The stored server URL + bearer token prefix every API call (`connection.ts`
   in `@takalif/web`; dormant in PWA/desktop builds).
-- Camera QR scanning is the next slice; manual entry and paste work now.
+- Camera QR scanning (system scanner UI), pasting a scanned payload, and
+  manual entry all work.
+
+## WebView scheme
+
+The shell serves its UI at `http://localhost` (`server.androidScheme`, not
+Capacitor's `https` default). The companion fetches plain-HTTP LAN addresses,
+and an `https` page doing that is mixed content, which the WebView blocks —
+that failed as "Cannot reach" for addresses a phone browser opens fine.
+`localhost` stays a secure context over http, so the service worker is
+unaffected, and the server already allowlists `http://localhost` as a
+companion origin. Switching schemes begins a fresh localStorage: an installed
+app pairs once more.
 
 ## Build
 
