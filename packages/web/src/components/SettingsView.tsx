@@ -148,15 +148,28 @@ function PairDevice() {
   let code: string;
   let url: string;
   let token: string;
+  // A TLS listener upgrades the QR: v2 payload with the certificate
+  // fingerprint the phone pins. Absent the listener (Docker, source runs
+  // without HTTPS_HOST), the v1 http payload ships as before.
+  const tls = pairing.data.fingerprint ? { fp: pairing.data.fingerprint, port: pairing.data.httpsPort } : null;
   try {
-    // The browser's own port: empty on 80/443 (reverse proxy), present
-    // otherwise. Never invent a default — a wrong port is a dead QR.
-    url = pairingUrl(active.address, window.location.port || '').replace(/\/$/, '');
-    if (!url) throw new Error('unreachable');
-    token = (freshToken ?? pairing.data.token).trim();
-    if (!token) throw new Error('empty token');
-    // Validate through the contract so the QR holds exactly what parses.
-    code = buildPairingPayload(url, token);
+    if (tls) {
+      if (typeof tls.port !== 'number') throw new Error('TLS port missing for the pairing');
+      // The QR names the TLS listener, not the browser's own port.
+      url = pairingUrl(active.address, tls.port, 'https');
+      token = (freshToken ?? pairing.data.token).trim();
+      if (!token) throw new Error('empty token');
+      code = buildPairingPayload(url, token, tls.fp);
+    } else {
+      // The browser's own port: empty on 80/443 (reverse proxy), present
+      // otherwise. Never invent a default — a wrong port is a dead QR.
+      url = pairingUrl(active.address, window.location.port || '').replace(/\/$/, '');
+      if (!url) throw new Error('unreachable');
+      token = (freshToken ?? pairing.data.token).trim();
+      if (!token) throw new Error('empty token');
+      // Validate through the contract so the QR holds exactly what parses.
+      code = buildPairingPayload(url, token);
+    }
   } catch (e) {
     return <Banner kind="error">{e instanceof Error ? e.message : String(e)}</Banner>;
   }
@@ -215,6 +228,7 @@ function PairDevice() {
       <p className="muted" style={{ marginBlock: '0 0.6rem' }}>
         Show this code to your phone to connect it. Only show it to your own
         devices — anyone who scans it gets full access to everything here.
+        {tls ? ' Phones connect encrypted and verify the server against this screen.' : ''}
       </p>
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'start' }}>
         <div style={{ color: 'var(--text)', background: '#fff', padding: '0.6rem', borderRadius: '0.6rem' }}>

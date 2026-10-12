@@ -315,7 +315,15 @@ export const api = {
     ),
 
   pairing: () =>
-    request<{ lanIP: string | null; interfaces: { name: string; address: string }[]; token: string }>(
+    request<{
+      lanIP: string | null;
+      interfaces: { name: string; address: string }[];
+      token: string;
+      /** SHA-256 of the TLS listener's certificate, or null when none runs. */
+      fingerprint: string | null;
+      /** Port of the TLS listener, or null when none runs. */
+      httpsPort: number | null;
+    }>(
       '/api/pairing',
     ),
   rotatePairing: () => request<{ token: string }>('/api/pairing/rotate', withBody('POST', {})),

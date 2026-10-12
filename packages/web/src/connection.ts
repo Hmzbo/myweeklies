@@ -12,6 +12,13 @@ import { buildPairingPayload, parsePairingPayload } from './pairing.js';
 export interface ServerConnection {
   url: string;
   token: string;
+  /**
+   * SHA-256 of the server's certificate DER, from a v2 pairing payload.
+   * Present means the companion pins the connection (an https URL without a
+   * fingerprint is refused by the contract instead). Absent on v1 http
+   * pairings; the channel is the bearer token, as documented.
+   */
+  fingerprint?: string;
 }
 
 const KEY = 'takalif-server';
@@ -45,23 +52,41 @@ export function getConnection(): ServerConnection | null {
   }
   if (!raw) return null;
   try {
-    const doc = JSON.parse(raw) as { url?: unknown; token?: unknown };
+    const doc = JSON.parse(raw) as { url?: unknown; token?: unknown; fp?: unknown };
     if (typeof doc.url !== 'string' || !doc.url || typeof doc.token !== 'string' || !doc.token) {
       return null;
     }
-    // Validate through the pairing contract so a corrupt entry can never
-    // produce a malformed base URL or an empty bearer.
-    parsePairingPayload(buildPairingPayload(doc.url, doc.token));
-    return { url: doc.url.replace(/\/$/, ''), token: doc.token };
+    // A corrupt fingerprint must never produce an unpinnable https entry:
+    // validate through the pairing contract, which refuses https without one.
+    if (doc.fp !== undefined && (typeof doc.fp !== 'string' || !doc.fp)) return null;
+    parsePairingPayload(
+      JSON.stringify(
+        doc.fp === undefined ? { v: 1, url: doc.url, token: doc.token } : { v: 2, url: doc.url, token: doc.token, fp: doc.fp },
+      ),
+    );
+    return {
+      url: doc.url.replace(/\/$/, ''),
+      token: doc.token,
+      ...(doc.fp === undefined ? {} : { fingerprint: doc.fp as string }),
+    };
   } catch {
     return null;
   }
 }
 
 /** Persist a connection. Throws descriptively on invalid input. */
-export function setConnection(url: string, token: string): ServerConnection {
-  const canonical = JSON.parse(buildPairingPayload(url, token)) as ServerConnection & { v: number };
-  const conn: ServerConnection = { url: canonical.url, token: canonical.token };
+export function setConnection(
+  url: string,
+  token: string,
+  fingerprint?: string,
+): ServerConnection {
+  const canonical = JSON.parse(
+    buildPairingPayload(url, token, fingerprint),
+  ) as ServerConnection & { v: number };
+  const conn: ServerConnection =
+    fingerprint === undefined
+      ? { url: canonical.url, token: canonical.token }
+      : { url: canonical.url, token: canonical.token, fingerprint: canonical.fingerprint };
   const store = storage();
   if (!store) throw new Error('Storage is unavailable on this device');
   try {
@@ -72,10 +97,12 @@ export function setConnection(url: string, token: string): ServerConnection {
   return conn;
 }
 
-/** Accept a pasted QR payload (`{"v":1,"url":…,"token":…}`) and store it. */
+/** Accept a scanned QR payload (`{"v":1|2,"url":…,"token":…[,"fp":…]}`) and
+ *  store it. The fingerprint, when present, comes with the URL it belongs to. */
 export function connectWithCode(text: string): ServerConnection {
   const payload = parsePairingPayload(text);
-  return setConnection(payload.url, payload.token);
+  const fingerprint = payload.v === 2 ? payload.fp : undefined;
+  return setConnection(payload.url, payload.token, fingerprint);
 }
 
 export function clearConnection(): void {
