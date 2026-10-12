@@ -9,7 +9,7 @@
  */
 export interface PairingPayload {
   v: 1;
-  /** Base URL of the server, e.g. `http://192.168.100.43:8787`. No path. */
+  /** Base URL of the server, e.g. `http://192.168.1.10:8787`. No path. */
   url: string;
   /** Bearer token for LAN API calls. */
   token: string;

@@ -119,13 +119,13 @@ export function ConnectView({ onConnected }: { onConnected: () => void }) {
         </button>
       </div>
       <h3 className="section-title">Or enter manually</h3>
-      <Field label="Server address" hint='Like http://192.168.100.43:8787 — no path after it.'>
+      <Field label="Server address" hint='Like http://192.168.1.10:8787 — no path after it.'>
         <input
           type="text"
           inputMode="url"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="http://192.168.100.43:8787"
+          placeholder="http://192.168.1.10:8787"
         />
       </Field>
       <Field label="Secret code" hint="The long code shown under the QR code.">

@@ -7,10 +7,10 @@ import {
 
 describe('pairing payload', () => {
   it('round-trips through the QR string', () => {
-    const text = buildPairingPayload('http://192.168.100.43:8787', 'abc123');
+    const text = buildPairingPayload('http://192.168.1.10:8787', 'abc123');
     expect(parsePairingPayload(text)).toEqual({
       v: 1,
-      url: 'http://192.168.100.43:8787',
+      url: 'http://192.168.1.10:8787',
       token: 'abc123',
     });
   });
@@ -40,8 +40,8 @@ describe('pairing payload', () => {
   });
 
   it('builds base URLs, keeping default ports implicit', () => {
-    expect(pairingUrl('192.168.100.43', 8787)).toBe('http://192.168.100.43:8787');
-    expect(pairingUrl('192.168.100.43', '8787')).toBe('http://192.168.100.43:8787');
+    expect(pairingUrl('192.168.1.10', 8787)).toBe('http://192.168.1.10:8787');
+    expect(pairingUrl('192.168.1.10', '8787')).toBe('http://192.168.1.10:8787');
     expect(pairingUrl('example.com', 443)).toBe('http://example.com');
     expect(pairingUrl('example.com', '')).toBe('http://example.com');
     expect(() => pairingUrl('', 8787)).toThrow(/empty/);

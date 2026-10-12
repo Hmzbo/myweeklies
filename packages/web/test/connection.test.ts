@@ -27,8 +27,8 @@ describe('server connection', () => {
 
   it('round-trips a valid connection', () => {
     vi.stubGlobal('localStorage', fakeStorage());
-    const conn = setConnection('http://192.168.100.43:8787', 'tok123');
-    expect(conn).toEqual({ url: 'http://192.168.100.43:8787', token: 'tok123' });
+    const conn = setConnection('http://192.168.1.10:8787', 'tok123');
+    expect(conn).toEqual({ url: 'http://192.168.1.10:8787', token: 'tok123' });
     expect(getConnection()).toEqual(conn);
   });
 

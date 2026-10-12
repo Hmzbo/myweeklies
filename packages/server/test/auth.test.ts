@@ -82,11 +82,11 @@ describe('pickPairingInterfaces', () => {
   it('ranks RFC 1918 first and drops internal and non-IPv4', () => {
     const picked = pickPairingInterfaces({
       Tailscale: [nic('IPv4', false, '100.88.254.127')],
-      Ethernet: [nic('IPv4', false, '192.168.100.43')],
+      Ethernet: [nic('IPv4', false, '192.168.1.10')],
       Loopback: [nic('IPv4', true, '127.0.0.1'), nic('IPv6', false, 'fe80::1')],
     });
     expect(picked).toEqual([
-      { name: 'Ethernet', address: '192.168.100.43' },
+      { name: 'Ethernet', address: '192.168.1.10' },
       { name: 'Tailscale', address: '100.88.254.127' },
     ]);
   });
@@ -94,11 +94,11 @@ describe('pickPairingInterfaces', () => {
   it('ranks virtual switches below physical NICs on the same private range', () => {
     const picked = pickPairingInterfaces({
       'vEthernet (WSL (Hyper-V firewall))': [nic('IPv4', false, '172.19.240.1')],
-      Ethernet: [nic('IPv4', false, '192.168.100.43')],
+      Ethernet: [nic('IPv4', false, '192.168.1.10')],
       Tailscale: [nic('IPv4', false, '100.88.254.127')],
     });
     expect(picked.map((n) => n.address)).toEqual([
-      '192.168.100.43',
+      '192.168.1.10',
       '172.19.240.1',
       '100.88.254.127',
     ]);
