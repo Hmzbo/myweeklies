@@ -51,11 +51,16 @@ export function slotPut<T>(
   next[key] = { fetchedAt: now, data };
   const keys = Object.keys(next);
   if (keys.length > MAX_SLOTS) {
-    let oldestKey = '';
+    let oldestKey: string | null = null;
+    let oldestAt = '';
     for (const k of keys) {
-      if (oldestKey === '' || next[k].fetchedAt < next[oldestKey].fetchedAt) oldestKey = k;
+      const v = next[k];
+      if (v !== undefined && (oldestKey === null || v.fetchedAt < oldestAt)) {
+        oldestKey = k;
+        oldestAt = v.fetchedAt;
+      }
     }
-    if (oldestKey !== '') delete next[oldestKey];
+    if (oldestKey !== null) delete next[oldestKey];
   }
   return next;
 }
@@ -73,7 +78,9 @@ export function slotGet<T>(store: SlotStore<T>, key: string): Slot<T> | undefine
 export interface QueuedStatus {
   occurrenceId: string;
   scheduledDate: string;
-  to: OccurrenceStatus;
+  /** Only the three actionable statuses: pending means "do nothing", which
+   *  is not an offline intent worth queueing. */
+  to: 'done' | 'missed' | 'skipped';
   queuedAt: Stamp;
 }
 
@@ -104,12 +111,10 @@ export interface DayLikeItem {
   scheduledDate: string;
   status: OccurrenceStatus;
   completedAt?: string | null;
-  [k: string]: unknown;
 }
 
 export interface DayLike {
   items: DayLikeItem[];
-  [k: string]: unknown;
 }
 
 /**
@@ -117,14 +122,15 @@ export interface DayLike {
  * the offline UI reads the user's intent immediately. `done` stamps a local
  * completion time (the server's authoritative value replaces it on the next
  * fetch); anything else clears it, mirroring `changeStatus` server-side.
- * Immutable — slot data is shared structure under user scroll.
+ * Generic on the day's real type so callers keep their shape; immutable —
+ * slot data is shared structure under user scroll.
  */
-export function overlayStatus(
-  day: DayLike,
+export function overlayStatus<T extends DayLike>(
+  day: T,
   occurrenceId: string,
-  to: OccurrenceStatus,
+  to: 'done' | 'missed' | 'skipped',
   now: Stamp,
-): DayLike {
+): T {
   return {
     ...day,
     items: day.items.map((item) =>

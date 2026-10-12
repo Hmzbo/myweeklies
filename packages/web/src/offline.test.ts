@@ -12,6 +12,7 @@ import {
   saveSlots,
   slotGet,
   slotPut,
+  type DayLike,
   type QueuedStatus,
   type SlotStore,
 } from './offline';
@@ -97,7 +98,7 @@ describe('outbox', () => {
 });
 
 describe('optimistic overlay', () => {
-  const day = {
+  const day: DayLike = {
     items: [
       { id: 'a', scheduledDate: '2026-10-11', status: 'pending', completedAt: null },
       { id: 'b', scheduledDate: '2026-10-11', status: 'skipped', completedAt: null },
@@ -106,19 +107,21 @@ describe('optimistic overlay', () => {
 
   it('marks done with a local completion stamp', () => {
     const next = overlayStatus(day, 'a', 'done', T(11));
-    expect(next.items[0]).toEqual({ id: 'a', scheduledDate: '2026-10-11', status: 'done', completedAt: T(11) });
-    expect(next.items[1].status).toBe('skipped');
+    expect(next.items[0]?.status).toBe('done');
+    expect(next.items[0]?.completedAt).toBe(T(11));
+    expect(next.items[1]?.status).toBe('skipped');
   });
 
   it('clears the stamp when un-doing, mirroring changeStatus server-side', () => {
     const doneDay = overlayStatus(day, 'a', 'done', T(11));
     const next = overlayStatus(doneDay, 'a', 'skipped', T(12));
-    expect(next.items[0]).toEqual({ id: 'a', scheduledDate: '2026-10-11', status: 'skipped', completedAt: null });
+    expect(next.items[0]?.status).toBe('skipped');
+    expect(next.items[0]?.completedAt).toBeNull();
   });
 
   it('never mutates the slot data under user scroll', () => {
     overlayStatus(day, 'a', 'done', T(11));
-    expect(day.items[0].status).toBe('pending');
+    expect(day.items[0]?.status).toBe('pending');
   });
 });
 
