@@ -126,6 +126,15 @@ export interface BuildAppOptions {
    * silently undone on the next boot.
    */
   auth?: { token: string; tokenDir?: string; pinned?: boolean };
+  /**
+   * TLS details for this instance. The fingerprint and port are pairing info
+   * and belong on every instance (the QR is built on whatever instance the
+   * desktop UI is served from); `key`/`cert` are only set on the LAN
+   * instance, whose Fastify server is constructed as HTTPS. A certificate
+   * present here never means the browser instance serves TLS: sockets do
+   * HTTP or HTTPS, never both, which is why there are two listeners.
+   */
+  tls?: { fingerprint: string; httpsPort: number; key?: string; cert?: string };
 }
 
 export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance {
@@ -133,13 +142,24 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
     // An explicitly empty token would silently disable enforcement.
     throw new Error('auth.token must be a non-empty string');
   }
-  const app = Fastify({ logger: options.logger ?? true });
+  // HTTPS starts at the server factory: one socket, one scheme. Only the
+  // LAN instance carries key/cert; the browser instance stays plain HTTP
+  // on loopback. The cast exists because Fastify's constructor overloads
+  // chafe at a conditional `https` value; the underlying server is a plain
+  // https.Server in both branches.
+  const httpsOptions =
+    options.tls?.cert && options.tls?.key ? { key: options.tls.key, cert: options.tls.cert } : undefined;
+  const app = Fastify({
+    logger: options.logger ?? true,
+    ...(httpsOptions ? { https: httpsOptions } : {}),
+  }) as FastifyInstance;
   const allowedOrigins = new Set(options.allowedOrigins ?? []);
   const clock = options.now ?? wallClock;
   // Reassignable: rotation replaces the accepted token in place.
   let authToken = options.auth?.token;
   const authDir = options.auth?.tokenDir;
   const authPinned = options.auth?.pinned ?? false;
+  const tls = options.tls ?? null;
 
   /**
    * Same-origin requests send no `Origin` header at all (curl, the bundled PWA
@@ -833,7 +853,13 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
     // One snapshot for both fields: two enumerations could straddle a NIC
     // flap and disagree about which address is first.
     const nics = pickPairingInterfaces(networkInterfaces());
-    return { lanIP: nics[0]?.address ?? null, interfaces: nics, token: authToken };
+    return {
+      lanIP: nics[0]?.address ?? null,
+      interfaces: nics,
+      token: authToken,
+      fingerprint: tls?.fingerprint ?? null,
+      httpsPort: tls?.httpsPort ?? null,
+    };
   });
 
   /**

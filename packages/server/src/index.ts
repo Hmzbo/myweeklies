@@ -5,6 +5,7 @@ import { buildApp } from './app.js';
 import { isLoopback, loadOrCreateToken, tokenFilePath } from './auth.js';
 import { openDatabase } from './db.js';
 import { pushConfigured, runReminderTick } from './reminders.js';
+import { loadOrCreateKeystore } from './tls.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..', '..', '..');
@@ -13,6 +14,11 @@ const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? '127.0.0.1';
 const DB_FILE = process.env.DB_FILE ?? join(root, 'data', 'takalif.sqlite');
 const WEB_DIST = process.env.WEB_DIST ?? join(root, 'packages', 'web', 'dist');
+// Companion TLS listener. Off unless HTTPS_HOST is set: the desktop shell sets
+// it (its own webview stays on loopback HTTP), plain servers keep serving the
+// browser PWA over HTTP with the bearer token, unchanged.
+const HTTPS_HOST = process.env.HTTPS_HOST ?? '';
+const HTTPS_PORT = Number(process.env.HTTPS_PORT ?? 8788);
 
 mkdirSync(dirname(DB_FILE), { recursive: true });
 
@@ -30,7 +36,25 @@ const pushConfig = {
   subject: process.env.VAPID_SUBJECT || undefined,
 };
 
-const app = buildApp(db, {
+/**
+ * Shared construction for both listeners. The HTTP one serves the browser PWA
+ * and the desktop webview over loopback; the optional TLS one serves the
+ * companion over the LAN with a self-signed certificate whose fingerprint the
+ * QR carries, so the phone pins it (trust-on-first-use, see tls.ts).
+ */
+const tls = HTTPS_HOST
+  ? await (async () => {
+      const keystore = await loadOrCreateKeystore(dirname(DB_FILE));
+      return {
+        fingerprint: keystore.fingerprint,
+        httpsPort: HTTPS_PORT,
+        cert: keystore.certPem,
+        key: keystore.keyPem,
+      };
+    })()
+  : null;
+
+const appOptions = (https: boolean) => ({
   // Same-origin only unless explicitly opened up. Reflecting any origin would
   // let any site the owner visits read and rewrite their ledger.
   allowedOrigins: (process.env.ALLOWED_ORIGINS ?? '')
@@ -40,7 +64,15 @@ const app = buildApp(db, {
   logger: process.env.LOG !== 'off',
   push: pushConfig,
   auth: { token: authToken, tokenDir: dirname(DB_FILE), pinned: tokenPinned },
+  // Pairing info rides on both instances; key/cert go to the LAN one alone.
+  tls: tls
+    ? https
+      ? { fingerprint: tls.fingerprint, httpsPort: tls.httpsPort, key: tls.key, cert: tls.cert }
+      : { fingerprint: tls.fingerprint, httpsPort: tls.httpsPort }
+    : undefined,
 });
+
+const app = buildApp(db, appOptions(false));
 
 if (existsSync(join(WEB_DIST, 'index.html'))) {
   // Serve the built PWA when it is available, so one process is the whole app.
@@ -64,11 +96,28 @@ app.setNotFoundHandler((req, reply) => {
   reply.sendFile('index.html');
 });
 
+// Companion TLS listener. API-only: a browser pointed here hits the
+// certificate warning by design — phones do not, they pin the fingerprint.
+let lanApp: ReturnType<typeof buildApp> | null = null;
+if (tls) {
+  lanApp = buildApp(db, appOptions(true));
+  lanApp.setNotFoundHandler((req, reply) => {
+    reply.code(404).send({ error: 'Not found' });
+  });
+}
+
 await app.listen({ port: PORT, host: HOST });
 
+if (lanApp) {
+  await lanApp.listen({ port: HTTPS_PORT, host: HTTPS_HOST });
+}
+
 console.log(`Takalif server listening on http://${HOST}:${PORT}`);
+if (lanApp) {
+  console.log(`  LAN TLS:  https://${HTTPS_HOST}:${HTTPS_PORT} (cert fingerprint ${tls!.fingerprint})`);
+}
 console.log(`  database: ${DB_FILE}`);
-if (HOST !== 'localhost' && !isLoopback(HOST)) {
+if ((HOST !== 'localhost' && !isLoopback(HOST)) || (lanApp && !isLoopback(HTTPS_HOST))) {
   // Deliberately printed: a headless LAN server is otherwise unpairable, and
   // the token file is root-readable on a single-user machine anyway.
   console.log(`  LAN API auth on; pairing token: ${authToken} (${tokenFilePath(dirname(DB_FILE))})`);
@@ -111,6 +160,7 @@ function gracefulExit(): void {
   void app
     .close()
     .catch(() => undefined)
+    .then(() => (lanApp ? lanApp.close().catch(() => undefined) : undefined))
     .then(() => {
       try {
         db.close();
