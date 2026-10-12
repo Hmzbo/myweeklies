@@ -16,6 +16,7 @@ Read these before changing anything structural.
 | [0006](0006-pwa-and-self-hosted-server.md) | PWA client, self-hosted server as source of truth |
 | [0007](0007-data-portability.md) | JSON backup/restore, CSV and VTODO export |
 | [0008](0008-container-packaging.md) | One image, one process, one volume |
+| [0019](0019-offline-companion.md) | Offline companion: read cache + outbox, server still the truth |
 
 ## Conventions
 
