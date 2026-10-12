@@ -64,6 +64,7 @@ import {
   sendTestNotification,
   type PushConfig,
 } from './reminders.js';
+import { firewallScript, mapFirewallOutcome, windowsFirewallExecutor, type FirewallExecutor } from './firewall.js';
 
 /** Default clock: wall time. Tests inject a fixed one. */
 const wallClock = (): Date => new Date();
@@ -135,6 +136,14 @@ export interface BuildAppOptions {
    * HTTP or HTTPS, never both, which is why there are two listeners.
    */
   tls?: { fingerprint: string; httpsPort: number; key?: string; cert?: string };
+  /**
+   * Whether the host runs Windows, gating the firewall-consent route.
+   * Injectable so tests are deterministic on any host, including Linux CI.
+   * Defaults to the actual platform.
+   */
+  windows?: boolean;
+  /** Firewall executor, injectable for the same reason. */
+  firewallExecutor?: FirewallExecutor;
 }
 
 export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance {
@@ -160,6 +169,8 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
   const authDir = options.auth?.tokenDir;
   const authPinned = options.auth?.pinned ?? false;
   const tls = options.tls ?? null;
+  const onWindows = options.windows ?? process.platform === 'win32';
+  const firewallExecutor: FirewallExecutor = options.firewallExecutor ?? windowsFirewallExecutor;
 
   /**
    * Same-origin requests send no `Origin` header at all (curl, the bundled PWA
@@ -860,6 +871,28 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
       fingerprint: tls?.fingerprint ?? null,
       httpsPort: tls?.httpsPort ?? null,
     };
+  });
+
+  /**
+   * One-tap firewall consent for phone pairing. Loopback-only — no remote
+   * caller may touch the firewall — and Windows-only, since other platforms
+   * answer the rule by hand. Elevation happens only inside the command the
+   * executor runs, after this endpoint is called by a button press: nothing
+   * spawns at boot.
+   */
+  app.post('/api/pairing/firewall', async (req, reply) => {
+    if (!authToken) return badRequest(reply, 'LAN pairing is not enabled on this server');
+    if (!isLoopback(req.ip)) {
+      reply.code(403).send({ error: 'Only this machine may change its own firewall' });
+      return;
+    }
+    if (!onWindows) {
+      return badRequest(
+        reply,
+        'The firewall helper is Windows-only — add an inbound TCP 8787-8788 allow rule by hand',
+      );
+    }
+    return mapFirewallOutcome(await firewallExecutor(firewallScript()));
   });
 
   /**
