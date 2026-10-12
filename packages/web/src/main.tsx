@@ -1,7 +1,12 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { hydrateOffline } from './sync';
 import './styles.css';
+
+// The offline replica (ADR 0019) loads before the first render: the queue
+// must exist before any Today view decides what a failed fetch means.
+hydrateOffline();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root is missing from index.html');
