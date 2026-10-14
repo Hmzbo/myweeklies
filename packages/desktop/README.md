@@ -42,9 +42,13 @@ machine (native code cannot cross-compile) — that is what CI does.
 
 Data lives in `%APPDATA%/com.takalif.desktop/takalif.sqlite`, never in the repo.
 
-The sidecar binds all interfaces (`0.0.0.0`) so a paired phone reaches it
-over WiFi — protection comes from the pairing bearer token, and Windows
-Firewall still gates the port. Pair from Settings → Pair a device.
+The HTTP listener stays loopback for the webview; a second, TLS listener
+binds all interfaces so a paired phone reaches the server encrypted —
+the pairing QR carries the certificate fingerprint the phone pins
+(trust-on-first-use). Protection comes from the pairing bearer token,
+and Windows Firewall still gates the port — Settings → Pair a device →
+"Allow phones through the firewall" opens both ports with one consent.
+Pair from Settings → Pair a device.
 
 ## Hacking on the shell
 

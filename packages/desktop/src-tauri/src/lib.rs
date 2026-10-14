@@ -114,11 +114,12 @@ fn start_sidecar(app: &tauri::AppHandle) {
             command
                 .args([server_entry.to_string_lossy().to_string()])
                 .env("PORT", PORT.to_string())
-                // LAN-reachable on purpose: the companion pairs over WiFi.
-                // The pairing bearer token (not the bind) is what protects
-                // the ledger — loopback callers skip auth, everyone else
-                // presents it, and Windows Firewall still gates the port.
-                .env("HOST", "0.0.0.0")
+                // Two listeners: HTTP stays loopback for the webview (same
+                // origin, no CORS changes), and the TLS listener opens to the
+                // LAN for paired companions (see server tls.ts). The pairing
+                // bearer token, not the bind, is what protects the ledger —
+                // Windows Firewall still gates the port.
+                .env("HTTPS_HOST", "0.0.0.0")
                 .env(
                     "DB_FILE",
                     data_dir.join("takalif.sqlite").to_string_lossy().to_string(),
