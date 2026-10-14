@@ -10,6 +10,8 @@ import type {
 } from '@takalif/core';
 import { Capacitor } from '@capacitor/core';
 import { getConnection, type ServerConnection } from './connection.js';
+import { ApiError, PIN_MISMATCH_STATUS } from './errors.js';
+import { transport } from './pinnedHttp.js';
 
 /** An occurrence as returned by /api/day and /api/occurrences (see `decorate`). */
 export interface DayItem extends Occurrence {
@@ -50,15 +52,9 @@ export interface SkipPeriodCreated {
   prompt: DayResponse['recoveryPrompt'];
 }
 
-export class ApiError extends Error {
-  readonly status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-  }
-}
+// Back-compat: the class moved to errors.ts so both transport layers can
+// construct it without a circular import.
+export { ApiError, PIN_MISMATCH_STATUS } from './errors.js';
 
 /** True inside the native companion shell. PWA and desktop: always false. */
 export function isCompanion(): boolean {
@@ -121,9 +117,15 @@ async function readError(res: Response): Promise<ApiError> {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const { url, headers } = buildEndpoint(path, getConnection(), isCompanion());
   let res: Response;
+  const merged = { ...headers, ...normalizeHeaders(init?.headers) };
   try {
-    res = await fetch(url, { ...init, headers: { ...headers, ...normalizeHeaders(init?.headers) } });
-  } catch {
+    res = await transport(
+      url,
+      { method: init?.method, body: init?.body as string | null, headers: merged },
+      getConnection()?.fingerprint,
+    );
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
     throw new ApiError(0, 'Cannot reach the server. Is it running?');
   }
   if (!res.ok) throw await readError(res);
@@ -138,12 +140,15 @@ async function throwIfJson(res: Response): Promise<unknown> {
   return text ? (JSON.parse(text) as unknown) : null;
 }
 
-/** Unauthenticated liveness check for the Connect screen: /health needs no bearer. */
-export async function probeServer(url: string): Promise<string> {
+/** Unauthenticated liveness check for the Connect screen: /health needs no
+ *  bearer. A fingerprint, when the scanned payload carried one, is pinned —
+ *  the very first call must already refuse a stranger's certificate. */
+export async function probeServer(url: string, fingerprint?: string): Promise<string> {
   let res: Response;
   try {
-    res = await fetch(`${url}/api/health`);
-  } catch {
+    res = await transport(`${url}/api/health`, {}, fingerprint);
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
     throw new ApiError(
       0,
       `Cannot reach ${url}. Same WiFi as the server, and is it running?`,
@@ -188,8 +193,9 @@ export async function fetchExport(kind: ExportKind): Promise<{ blob: Blob; filen
   const { url, headers } = buildEndpoint(EXPORT_PATHS[kind], getConnection(), isCompanion());
   let res: Response;
   try {
-    res = await fetch(url, { headers });
-  } catch {
+    res = await transport(url, { headers }, getConnection()?.fingerprint);
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
     throw new ApiError(0, 'Cannot reach the server. Is it running?');
   }
   if (!res.ok) throw await readError(res);

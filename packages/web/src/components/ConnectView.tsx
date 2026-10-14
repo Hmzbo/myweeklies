@@ -63,8 +63,10 @@ export function ConnectView({ onConnected }: { onConnected: () => void }) {
       const conn = store();
       // Prove reachability before leaving: a well-formed but wrong address
       // must keep the user here with the error, not strand them in a dead app.
+      // A v2 fingerprint pins the probe itself — the first call after a scan
+      // already refuses a stranger's certificate.
       try {
-        await probeServer(conn.url);
+        await probeServer(conn.url, conn.fingerprint);
       } catch (probeError) {
         clearConnection();
         throw probeError;
