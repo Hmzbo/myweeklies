@@ -25,6 +25,21 @@ unaffected, and the server already allowlists `http://localhost` as a
 companion origin. Switching schemes begins a fresh localStorage: an installed
 app pairs once more.
 
+## Pinned HTTP transport
+
+Every `/api` call in the companion rides a native OkHttp channel
+(`PinnedHttpPlugin.java`), not the WebView network stack. The WebView cannot
+pin certificates; the pairing QR can contain the SHA-256 of the server's
+TLS certificate, and the phone refuses any handshake whose leaf does not
+match it — trust-on-first-use, the trust anchor travelling by camera rather
+than over the wire. Without a pin (v1 http pairings), plain cleartext goes
+through, per the pairing contract's own rules. Hostname verification is
+deliberately off: the server answers an IP, the fingerprint is the identity.
+
+Pin mismatches surface as a re-pair message and are never swallowed by the
+offline queue — a server answering with the wrong certificate is not (only)
+the server the user paired.
+
 ## Build
 
 Prerequisites: Android command-line tools (or Studio), JDK 21.
