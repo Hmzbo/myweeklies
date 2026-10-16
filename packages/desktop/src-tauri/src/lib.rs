@@ -39,6 +39,7 @@ pub fn run() {
                     .level(log::LevelFilter::Info)
                     .build(),
             )?;
+            ensure_firewall();
             start_sidecar(&app.handle());
             Ok(())
         })
@@ -69,6 +70,87 @@ const PORT: u16 = 8787;
 /// anyway and the frontend's error banner explains how to retry.
 const READY_TIMEOUT_SECS: u64 = 25;
 const LISTENING_MARKER: &str = "Takalif server listening on";
+
+/// The rule the app opens for itself. Mirrors the server's firewall.ts
+/// constants; every companion app's inbound port belongs behind one name.
+const FIREWALL_RULE_NAME: &str = "Takalif companion (8787-8788)";
+
+/**
+ * Open the companion's inbound ports automatically, once, the way a
+ * first-class desktop app does: without asking the user to read or visit
+ * anything.
+ *
+ * Windows refuses unsolicited inbound by default, and no user should ever
+ * have to know that. So at every launch a hidden PowerShell probes for the
+ * rule (unprivileged, cheap), and only when it is missing runs the one
+ * elevated add-rule — which surfaces as Windows' standard "Do you want to
+ * allow this app…" dialog, the same prompt installing any software shows.
+ * Accepting it is the whole interaction; declining it changes nothing and
+ * the next launch quietly retries. The sidecar starts regardless: if the
+ * rule lands seconds later, the phone simply reconnects.
+ *
+ * Deliberately fire-and-forget on a thread — a pending UAC dialog must
+ * never hold the app's window hostage. This is infrastructure, not UX.
+ */
+fn ensure_firewall() {
+    std::thread::spawn(|| {
+        if firewall_rule_present() {
+            return;
+        }
+        let script = format!(
+            "if (-not (Get-NetFirewallRule -DisplayName '{}' -ErrorAction SilentlyContinue)) {{ \
+                Start-Process netsh -Verb RunAs -Wait -ErrorAction SilentlyContinue \
+                -ArgumentList 'advfirewall firewall add rule name=\"{}\" dir=in action=allow protocol=TCP localport=8787-8788' \
+            }}; \
+            if (Get-NetFirewallRule -DisplayName '{}' -ErrorAction SilentlyContinue) {{ exit 0 }} else {{ exit 1 }}",
+            FIREWALL_RULE_NAME, FIREWALL_RULE_NAME, FIREWALL_RULE_NAME
+        );
+        let mut command = std::process::Command::new("powershell");
+        command.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            // CREATE_NO_WINDOW: infrastructure must not flash a console.
+            command.creation_flags(0x0800_0000);
+        }
+        match command.output() {
+            Ok(output) => {
+                if output.status.success() {
+                    log::info!("companion firewall rule present");
+                } else {
+                    // Declined UAC, policy, or AV interference: retry next
+                    // launch, silently, forever.
+                    log::warn!("firewall rule not added this launch (status {:?})", output.status);
+                }
+            }
+            Err(error) => log::warn!("firewall ensure failed: {error}"),
+        }
+    });
+}
+
+/// Unprivileged probe: does our rule already exist?
+fn firewall_rule_present() -> bool {
+    let mut command = std::process::Command::new("netsh");
+    command.args([
+        "advfirewall",
+        "firewall",
+        "show",
+        "rule",
+        &format!("name={}", FIREWALL_RULE_NAME),
+    ]);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    match command.output() {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            stdout.contains(FIREWALL_RULE_NAME)
+        }
+        Err(_) => false,
+    }
+}
 
 /// Spawn the bundled Node runtime with the server bundle. All paths are
 /// absolute and passed via env: the sidecar must not depend on any cwd.

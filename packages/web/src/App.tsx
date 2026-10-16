@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Settings } from '@takalif/core';
 import { api } from './api';
-import { getConnection, isCompanion } from './connection.js';
+import { clearConnection, getConnection, isCompanion } from './connection.js';
 import { useOnline, useResource, useTheme } from './data';
 import { attemptReplay, hydrateOffline, offlineSnapshotStatic, useOfflineSnapshot } from './sync';
 import {
@@ -142,9 +142,44 @@ export function App() {
     setTab('rules');
   }
 
+  /**
+   * The saved server is unreachable and the retry loop cannot fix it — most
+   * common cause: the server moved (reinstall, new address). Offer the one
+   * exit the user actually wants: throw away the dead pairing and scan the
+   * live QR. No Settings treasure hunt.
+   */
+  const [repairRequested, setRepairRequested] = useState<'yes' | 'no' | null>(null);
+  const needsRepair =
+    isCompanion() &&
+    getConnection() !== null &&
+    settings.data !== null &&
+    settings.error?.status === 0 &&
+    netOnline &&
+    repairRequested === null;
+
   return (
     <>
       <header className="app-header">
+        {needsRepair && (
+          <div className="offline-bar" role="status">
+            <span style={{ display: 'inline-flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span>Your saved server is unreachable — it may have moved.</span>
+              <button
+                type="button"
+                className="btn small"
+                onClick={() => {
+                  clearConnection();
+                  setConnected(false);
+                }}
+              >
+                Re-pair with the new code
+              </button>
+              <button type="button" className="btn small ghost" onClick={() => setRepairRequested('no')}>
+                Keep trying
+              </button>
+            </span>
+          </div>
+        )}
         {!offline && sync.queued > 0 && (
           <div className="offline-bar" role="status">
             {sync.queued} offline change{sync.queued === 1 ? '' : 's'} waiting to sync…
